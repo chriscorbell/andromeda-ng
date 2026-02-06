@@ -4,6 +4,9 @@ import andromedaIcon from './assets/andromeda.png'
 
 const HLS_URL =
   'https://aex.andromedatv.cc/iptv/channel/1.m3u8?mode=segmenter'
+const CHAT_API_URL =
+  import.meta.env.VITE_CHAT_API_URL || 'http://localhost:3001'
+const CHAT_STORAGE_KEY = 'andromeda-chat-auth'
 
 type ScheduleItem = {
   title: string
@@ -13,6 +16,13 @@ type ScheduleItem = {
   live?: boolean
   start?: Date
   stop?: Date
+}
+
+type ChatMessage = {
+  id: number
+  nickname: string
+  body: string
+  created_at: string
 }
 
 const fallbackSchedule: ScheduleItem[] = [
@@ -123,24 +133,11 @@ const parseEpisodePrefix = (program: Element) => {
   return undefined
 }
 
-const chat = [
-  { user: 'syntact3', message: 'hello' },
-  { user: 'jake21', message: 'hey guys' },
-  { user: 'p0ppys33d', message: 'i love this episode' },
-  { user: 'klingm4n', message: 'this is the future' },
-  { user: 'yuri8', message: 'how is this website free' },
-  { user: 'ilovecats', message: 'idk but its great' },
-  { user: 'mike_g', message: 'what if we each told 2 friends about it' },
-  { user: 'jigglypuff284', message: '@mike_g too many people would know' },
-  { user: 'loopback1', message: 'happy friday everybody' },
-  { user: 'yuri8', message: 'yo what up @loopback1' },
-  { user: 'jake21', message: 'how do i submit a content request?' },
-  { user: 'jigglypuff284', message: '@jake21 i do not know if we can' },
-]
-
 function App() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const videoFrameRef = useRef<HTMLDivElement | null>(null)
+  const chatScrollRef = useRef<HTMLDivElement | null>(null)
+  const chatStreamRef = useRef<EventSource | null>(null)
   const [isMuted, setIsMuted] = useState(true)
   const [volume, setVolume] = useState(0.6)
   const [controlsVisible, setControlsVisible] = useState(false)
@@ -151,6 +148,17 @@ function App() {
   )
   const scheduleTimeoutRef = useRef<number | null>(null)
   const scheduleIntervalRef = useRef<number | null>(null)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const [authToken, setAuthToken] = useState<string | null>(null)
+  const [authNickname, setAuthNickname] = useState<string | null>(null)
+  const [authNicknameInput, setAuthNicknameInput] = useState('')
+  const [authPasswordInput, setAuthPasswordInput] = useState('')
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authLoading, setAuthLoading] = useState(false)
+  const [messageBody, setMessageBody] = useState('')
+  const [chatError, setChatError] = useState<string | null>(null)
+  const [chatLoading, setChatLoading] = useState(false)
 
   useEffect(() => {
     const video = videoRef.current
@@ -219,7 +227,7 @@ function App() {
         const programs = channelPrograms.length ? channelPrograms : allPrograms
 
         const items = programs
-          .map((program) => {
+          .map((program): ScheduleItem | null => {
             const title = program.querySelector('title')?.textContent?.trim()
             if (!title) {
               return null
@@ -240,13 +248,13 @@ function App() {
 
             return {
               title,
-              episode,
-              description,
               start,
               stop,
-            } satisfies ScheduleItem
+              ...(episode ? { episode } : {}),
+              ...(description ? { description } : {}),
+            }
           })
-          .filter((item): item is ScheduleItem => Boolean(item))
+          .filter((item): item is ScheduleItem => item !== null)
           .sort((a, b) => (a.start?.getTime() ?? 0) - (b.start?.getTime() ?? 0))
 
         if (!items.length || cancelled) {
@@ -363,6 +371,234 @@ function App() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    const raw = window.localStorage.getItem(CHAT_STORAGE_KEY)
+    if (!raw) {
+      return
+    }
+
+    try {
+      const stored = JSON.parse(raw) as { nickname?: string; token?: string }
+      if (stored?.token && stored?.nickname) {
+        setAuthToken(stored.token)
+        setAuthNickname(stored.nickname)
+      }
+    } catch (error) {
+      console.warn('Failed to read stored chat auth', error)
+    }
+  }, [])
+
+  const clearAuth = () => {
+    setAuthToken(null)
+    setAuthNickname(null)
+    setAuthNicknameInput('')
+    setAuthPasswordInput('')
+    setAuthError(null)
+    if (chatStreamRef.current) {
+      chatStreamRef.current.close()
+      chatStreamRef.current = null
+    }
+    window.localStorage.removeItem(CHAT_STORAGE_KEY)
+  }
+
+  const fetchMessages = async () => {
+    if (!authToken) {
+      return
+    }
+
+    setChatLoading(true)
+    setChatError(null)
+
+    try {
+      const response = await fetch(`${CHAT_API_URL}/messages`, {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      })
+
+      if (response.status === 401) {
+        clearAuth()
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to load messages')
+      }
+
+      const payload = (await response.json()) as { messages: ChatMessage[] }
+      setChatMessages(payload.messages)
+    } catch (error) {
+      console.warn('Failed to load chat messages', error)
+      setChatError('Unable to load messages. Try again in a moment.')
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  const fetchPublicMessages = async () => {
+    setChatLoading(true)
+    setChatError(null)
+
+    try {
+      const response = await fetch(`${CHAT_API_URL}/messages/public`)
+      if (!response.ok) {
+        throw new Error('Failed to load public messages')
+      }
+
+      const payload = (await response.json()) as { messages: ChatMessage[] }
+      setChatMessages(payload.messages)
+    } catch (error) {
+      console.warn('Failed to load public chat messages', error)
+      setChatError('Unable to load messages. Try again in a moment.')
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!authToken) {
+      if (chatStreamRef.current) {
+        chatStreamRef.current.close()
+        chatStreamRef.current = null
+      }
+      void fetchPublicMessages()
+      return
+    }
+
+    void fetchMessages()
+
+    const streamUrl = new URL(`${CHAT_API_URL}/messages/stream`)
+    streamUrl.searchParams.set('token', authToken)
+    const stream = new EventSource(streamUrl.toString())
+    chatStreamRef.current = stream
+
+    stream.addEventListener('ready', () => {
+      setChatError(null)
+    })
+
+    stream.addEventListener('message', (event) => {
+      try {
+        const message = JSON.parse(event.data) as ChatMessage
+        setChatMessages((prev) => {
+          if (prev.some((entry) => entry.id === message.id)) {
+            return prev
+          }
+          const next = [...prev, message]
+          return next.length > 100 ? next.slice(-100) : next
+        })
+        setChatError(null)
+      } catch (error) {
+        console.warn('Failed to parse chat message', error)
+      }
+    })
+
+    stream.addEventListener('clear', () => {
+      setChatMessages([])
+    })
+
+    stream.addEventListener('error', () => {
+      setChatError('Chat connection lost. Reconnecting...')
+    })
+
+    return () => {
+      stream.close()
+      if (chatStreamRef.current === stream) {
+        chatStreamRef.current = null
+      }
+    }
+  }, [authToken])
+
+  useEffect(() => {
+    if (!chatScrollRef.current) {
+      return
+    }
+
+    chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+  }, [chatMessages.length])
+
+  const handleAuthSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setAuthError(null)
+    setAuthLoading(true)
+
+    try {
+      const response = await fetch(
+        `${CHAT_API_URL}/auth/${authMode === 'login' ? 'login' : 'register'}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            nickname: authNicknameInput.trim(),
+            password: authPasswordInput,
+          }),
+        },
+      )
+
+      const payload = (await response.json()) as { nickname?: string; token?: string; error?: string }
+
+      if (!response.ok || !payload.token || !payload.nickname) {
+        setAuthError(payload.error || 'Unable to sign in. Check your details.')
+        return
+      }
+
+      setAuthToken(payload.token)
+      setAuthNickname(payload.nickname)
+      setAuthPasswordInput('')
+      setMessageBody('')
+      window.localStorage.setItem(
+        CHAT_STORAGE_KEY,
+        JSON.stringify({ nickname: payload.nickname, token: payload.token }),
+      )
+    } catch (error) {
+      console.warn('Auth failed', error)
+      setAuthError('Unable to sign in. Try again in a moment.')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleSendMessage = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!authToken) {
+      return
+    }
+
+    const trimmed = messageBody.trim()
+    if (!trimmed) {
+      return
+    }
+
+    setChatError(null)
+
+    try {
+      const response = await fetch(`${CHAT_API_URL}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ body: trimmed }),
+      })
+
+      if (response.status === 401) {
+        clearAuth()
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to send message')
+      }
+
+      await response.json()
+      setMessageBody('')
+    } catch (error) {
+      console.warn('Failed to send chat message', error)
+      setChatError('Message failed to send.')
+    }
+  }
 
   return (
     <div className="h-dvh w-full bg-[#050505] text-zinc-100">
@@ -503,13 +739,13 @@ function App() {
                           data-clickable={hasDetails}
                           disabled={!hasDetails}
                         >
-                          <span className="truncate text-xs">
+                          <span className="truncate text-xs text-zinc-400">
                             {item.title}
                           </span>
                           <span className="flex items-center gap-2">
                             {item.live ? (
                               <span className="flex items-center gap-2 text-[11px] text-zinc-200">
-                                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
+                                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--color-accent-red)]" />
                                 live
                               </span>
                             ) : (
@@ -544,7 +780,7 @@ function App() {
                               </div>
                             )}
                             {item.description && (
-                              <p className="text-xs leading-relaxed text-zinc-400">
+                              <p className="text-xs text-zinc-400">
                                 {item.description}
                               </p>
                             )}
@@ -560,23 +796,155 @@ function App() {
             <div className="flex min-h-0 flex-1 flex-col border-t border-zinc-800">
               <header className="flex h-12 items-center border-b border-zinc-800 px-4 text-xs text-zinc-300">
                 <span className="text-lg font-extrabold">chat</span>
+                {authNickname && (
+                  <span className="ml-auto text-[11px] text-zinc-500">
+                    signed in as <span className="text-zinc-200">{authNickname}</span>
+                  </span>
+                )}
               </header>
-              <div className="scrollbar-minimal min-h-0 flex-1 overflow-y-auto">
-                <ul className="divide-y divide-zinc-800">
-                  {chat.map((entry, index) => (
-                    <li
-                      key={`${entry.user}-${index}`}
-                      className="px-4 py-2 text-xs text-zinc-400"
+              {authToken ? (
+                <>
+                  <div
+                    ref={chatScrollRef}
+                    className="scrollbar-minimal min-h-0 flex-1 overflow-y-auto"
+                  >
+                    <ul className="divide-y divide-zinc-800">
+                      {chatMessages.length === 0 && !chatLoading && (
+                        <li className="px-4 py-6 text-xs text-zinc-500">
+                          No messages yet.
+                        </li>
+                      )}
+                      {chatMessages.map((entry) => (
+                        <li
+                          key={`${entry.id}`}
+                          className="px-4 py-2 text-xs text-zinc-400"
+                        >
+                          <span className="text-zinc-100">{entry.nickname}</span>{' '}
+                          <span>{entry.body}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <form
+                    onSubmit={handleSendMessage}
+                    className="border-t border-zinc-800 px-4 py-3 text-[11px]"
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={messageBody}
+                        onChange={(event) => setMessageBody(event.target.value)}
+                        placeholder="Type a message"
+                        className="h-9 flex-1 border border-zinc-700 bg-black/40 px-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        className="h-9 border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100 transition hover:border-zinc-500"
+                      >
+                        send
+                      </button>
+                    </div>
+                    {chatError && (
+                      <div className="mt-2 text-[11px] text-[var(--color-accent-red)]">
+                        {chatError}
+                      </div>
+                    )}
+                    {chatLoading && (
+                      <div className="mt-2 text-[11px] text-zinc-500">updating…</div>
+                    )}
+                    <div className="mt-2 text-[11px] text-zinc-500">
+                      <button
+                        type="button"
+                        className="text-zinc-400 hover:text-zinc-200"
+                        onClick={clearAuth}
+                      >
+                        sign out
+                      </button>
+                    </div>
+                  </form>
+                </>
+              ) : (
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <div
+                    ref={chatScrollRef}
+                    className="scrollbar-minimal min-h-0 flex-1 overflow-y-auto"
+                  >
+                    <ul className="divide-y divide-zinc-800">
+                      {chatMessages.length === 0 && !chatLoading && (
+                        <li className="px-4 py-6 text-xs text-zinc-500">
+                          No messages yet.
+                        </li>
+                      )}
+                      {chatMessages.map((entry) => (
+                        <li
+                          key={`${entry.id}`}
+                          className="px-4 py-2 text-xs text-zinc-400"
+                        >
+                          <span className="text-zinc-100">{entry.nickname}</span>{' '}
+                          <span>{entry.body}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <form
+                    key={authMode}
+                    onSubmit={handleAuthSubmit}
+                    className="flex flex-col gap-3 border-t border-zinc-800 px-4 py-4 text-[11px] animate-[fadeIn_220ms_ease-out] motion-reduce:animate-none"
+                  >
+                    <div className="text-xs text-zinc-400">
+                      {authMode === 'login' ? 'sign in to chat' : 'create an account'}
+                    </div>
+                    <input
+                      value={authNicknameInput}
+                      onChange={(event) => setAuthNicknameInput(event.target.value)}
+                      placeholder="username"
+                      className="h-9 border border-zinc-700 bg-black/40 px-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
+                    />
+                    <input
+                      type="password"
+                      value={authPasswordInput}
+                      onChange={(event) => setAuthPasswordInput(event.target.value)}
+                      placeholder="password"
+                      className="h-9 border border-zinc-700 bg-black/40 px-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      className="h-9 border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={authLoading}
                     >
-                      <span className="text-zinc-100">{entry.user}</span>{' '}
-                      <span>{entry.message}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="border-t border-zinc-800 px-4 py-3 text-[11px] text-zinc-500">
-                sign in to chat
-              </div>
+                      {authLoading
+                        ? 'working…'
+                        : authMode === 'login'
+                          ? 'sign in'
+                          : 'create account'}
+                    </button>
+                    {authError && (
+                      <div className="text-[11px] text-[var(--color-accent-red)]">{authError}</div>
+                    )}
+                    {chatError && (
+                      <div className="text-[11px] text-[var(--color-accent-red)]">{chatError}</div>
+                    )}
+                    {chatLoading && (
+                      <div className="text-[11px] text-zinc-500">updating…</div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAuthMode((prev) =>
+                          prev === 'login' ? 'register' : 'login',
+                        )
+                      }
+                      className="group inline-flex w-fit items-center gap-1 text-left text-zinc-400 transition-colors duration-200 ease-out hover:text-zinc-100 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 cursor-pointer"
+                    >
+                      {authMode === 'login'
+                        ? 'need an account? create one'
+                        : 'already have an account? sign in'}
+                      <span className="text-[10px] text-zinc-500 transition-colors duration-200 ease-out group-hover:text-zinc-300">
+                        →
+                      </span>
+                    </button>
+                  </form>
+                </div>
+              )}
             </div>
           </aside>
         </div>
