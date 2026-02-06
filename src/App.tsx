@@ -83,7 +83,10 @@ const cleanXmltvText = (value?: string | null) => {
   const normalized = value.replace(/<br\s*\/?\s*>/gi, '\n')
   const container = document.createElement('div')
   container.innerHTML = normalized
-  const text = container.textContent?.replace(/\s+\n/g, '\n').trim()
+  const text = container.textContent
+    ?.replace(/\s+\n/g, '\n')
+    .replace(/\n?\s*Source:\s*[^\n]+\s*$/i, '')
+    .trim()
   return text || undefined
 }
 
@@ -143,6 +146,9 @@ function App() {
   const [controlsVisible, setControlsVisible] = useState(false)
   const hideTimeoutRef = useRef<number | null>(null)
   const [schedule, setSchedule] = useState<ScheduleItem[]>(fallbackSchedule)
+  const [expandedScheduleKey, setExpandedScheduleKey] = useState<string | null>(
+    null,
+  )
   const scheduleTimeoutRef = useRef<number | null>(null)
   const scheduleIntervalRef = useRef<number | null>(null)
 
@@ -254,7 +260,7 @@ function App() {
         )
         const startIndex = currentIndex >= 0 ? currentIndex : 0
 
-        const sliced = items.slice(startIndex, startIndex + 8).map((item, idx) => {
+        const sliced = items.slice(startIndex, startIndex + 25).map((item, idx) => {
           const isLive = idx === 0 && currentIndex >= 0
           return {
             ...item,
@@ -367,7 +373,7 @@ function App() {
             alt="andromeda"
             className="h-3.5 w-3.5 object-contain"
           />
-          andromeda
+          <span className="text-lg font-extrabold">andromeda</span>
         </header>
         <div className="grid min-h-0 flex-1 grid-cols-[auto_minmax(240px,1fr)] animate-[fadeIn_700ms_ease-out] motion-reduce:animate-none">
           <div className="flex h-full min-h-0 items-stretch">
@@ -468,51 +474,92 @@ function App() {
           </div>
 
           <aside className="flex min-h-0 flex-col border-l border-zinc-800">
-            <div className="flex min-h-0 flex-[3] flex-col">
+            <div className="flex min-h-0 flex-1 flex-col">
               <header className="flex h-12 items-center border-b border-zinc-800 px-4 text-xs text-zinc-300">
-                schedule
+                <span className="text-lg font-extrabold">schedule</span>
               </header>
               <div className="scrollbar-minimal min-h-0 flex-1 overflow-y-auto">
                 <ul className="divide-y divide-zinc-800">
-                  {schedule.map((item) => (
-                    <li
-                      key={`${item.title}-${item.time}`}
-                      className="space-y-2 px-4 py-3 text-sm text-zinc-300"
-                    >
-                      <div className="flex items-center justify-between gap-3 text-zinc-100">
-                        <span className="truncate text-sm">
-                          {item.title}
-                        </span>
-                        {item.live ? (
-                          <span className="flex items-center gap-2 text-[11px] text-zinc-200">
-                            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
-                            live
+                  {schedule.map((item) => {
+                    const itemKey = `${item.title}-${item.time}`
+                    const isExpanded = expandedScheduleKey === itemKey
+                    const hasDetails = Boolean(item.episode || item.description)
+
+                    return (
+                      <li
+                        key={itemKey}
+                        className="px-4 py-3 text-sm text-zinc-300"
+                      >
+                        <button
+                          type="button"
+                          className={`schedule-row flex w-full items-center justify-between gap-3 rounded-md text-left text-zinc-100 transition ${hasDetails ? 'hover:bg-zinc-900/60 hover:text-white' : ''}`}
+                          onClick={() =>
+                            setExpandedScheduleKey((prev) =>
+                              prev === itemKey ? null : itemKey,
+                            )
+                          }
+                          aria-expanded={isExpanded}
+                          data-expanded={isExpanded}
+                          data-clickable={hasDetails}
+                          disabled={!hasDetails}
+                        >
+                          <span className="truncate text-xs">
+                            {item.title}
                           </span>
-                        ) : (
-                          <span className="text-[11px] text-zinc-500">
-                            {item.time}
+                          <span className="flex items-center gap-2">
+                            {item.live ? (
+                              <span className="flex items-center gap-2 text-[11px] text-zinc-200">
+                                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
+                                live
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-zinc-500">
+                                {item.time}
+                              </span>
+                            )}
+                            {hasDetails && (
+                              <svg
+                                viewBox="0 0 24 24"
+                                className="schedule-chevron h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                              >
+                                <path d="M6 9l6 6 6-6" />
+                              </svg>
+                            )}
                           </span>
+                        </button>
+                        {hasDetails && (
+                          <div
+                            className="schedule-details"
+                            data-expanded={isExpanded}
+                          >
+                            {item.episode && (
+                              <div className="text-xs text-zinc-500">
+                                {item.episode}
+                              </div>
+                            )}
+                            {item.description && (
+                              <p className="text-xs leading-relaxed text-zinc-400">
+                                {item.description}
+                              </p>
+                            )}
+                          </div>
                         )}
-                      </div>
-                      {item.episode && (
-                        <div className="text-xs text-zinc-500">
-                          {item.episode}
-                        </div>
-                      )}
-                      {item.description && (
-                        <p className="text-xs leading-relaxed text-zinc-400">
-                          {item.description}
-                        </p>
-                      )}
-                    </li>
-                  ))}
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-[2] flex-col border-t border-zinc-800">
+            <div className="flex min-h-0 flex-1 flex-col border-t border-zinc-800">
               <header className="flex h-12 items-center border-b border-zinc-800 px-4 text-xs text-zinc-300">
-                chat
+                <span className="text-lg font-extrabold">chat</span>
               </header>
               <div className="scrollbar-minimal min-h-0 flex-1 overflow-y-auto">
                 <ul className="divide-y divide-zinc-800">

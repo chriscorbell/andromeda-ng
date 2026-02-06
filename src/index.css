@@ -21,6 +21,7 @@
   color-scheme: dark;
   font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
+  font-size: 16px;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -116,6 +117,43 @@ select {
   border-radius: 999px;
   background-color: #e4e4e7;
   border: 1px solid #52525b;
+}
+
+.schedule-row {
+  cursor: pointer;
+}
+
+.schedule-row[data-clickable='false'] {
+  cursor: default;
+}
+
+.schedule-chevron {
+  color: #71717a;
+  transition: transform 200ms ease, color 200ms ease;
+}
+
+.schedule-row[data-clickable='true']:hover .schedule-chevron {
+  color: #e4e4e7;
+}
+
+.schedule-row[data-expanded='true'] .schedule-chevron {
+  transform: rotate(180deg);
+}
+
+.schedule-details {
+  display: grid;
+  gap: 0.35rem;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: max-height 260ms ease, opacity 200ms ease, transform 200ms ease;
+}
+
+.schedule-details[data-expanded='true'] {
+  max-height: 220px;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 @keyframes fadeIn {
