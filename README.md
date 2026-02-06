@@ -1,6 +1,6 @@
-# Andromeda
+# andromeda-ng
 
-Single-page mockup for a classic 90s anime livestream with schedule and chat.
+Single-page web app for a video livestream with schedule and chat.
 
 ## Stack
 
