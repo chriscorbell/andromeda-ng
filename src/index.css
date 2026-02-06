@@ -1,0 +1,131 @@
+@import "tailwindcss";
+@import "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap";
+
+@theme {
+  --font-sans: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  --font-mono: var(--font-sans);
+  --default-font-family: var(--font-sans);
+  --default-mono-font-family: var(--font-sans);
+}
+
+@layer base {
+
+  html,
+  body {
+    font-family: var(--font-sans);
+  }
+}
+
+:root {
+  color-scheme: dark;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: #050505;
+  color: #e5e5e5;
+  overflow: hidden;
+  font-family: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+#root {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.scanlines {
+  background-color: #050505;
+}
+
+.scrollbar-minimal {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 200ms ease;
+}
+
+.scrollbar-minimal:hover,
+.scrollbar-minimal:focus-within {
+  scrollbar-color: #3f3f46 #050505;
+}
+
+.scrollbar-minimal::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-minimal::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+.scrollbar-minimal::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  transition: background-color 200ms ease, border-color 200ms ease;
+}
+
+.scrollbar-minimal:hover::-webkit-scrollbar-thumb,
+.scrollbar-minimal:focus-within::-webkit-scrollbar-thumb {
+  background-color: #3f3f46;
+  border-color: #050505;
+}
+
+.scrollbar-minimal:hover::-webkit-scrollbar-thumb:hover,
+.scrollbar-minimal:focus-within::-webkit-scrollbar-thumb:hover {
+  background-color: #52525b;
+}
+
+.volume-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: #3f3f46;
+  border-radius: 999px;
+  height: 4px;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background-color: #e4e4e7;
+  border: 1px solid #52525b;
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background-color: #e4e4e7;
+  border: 1px solid #52525b;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
