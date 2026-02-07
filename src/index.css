@@ -28,7 +28,9 @@
   color-scheme: dark;
   font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
-  font-size: 16px;
+  font-size: 20px;
+  --text-body: 0.8rem;
+  --text-header: 1.1rem;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -57,6 +59,46 @@ select {
 #root {
   height: 100dvh;
   overflow: hidden;
+}
+
+.ui-body {
+  font-size: var(--text-body);
+}
+
+.ui-header {
+  font-size: var(--text-header);
+  line-height: 1.1;
+}
+
+.clock {
+  white-space: pre;
+  font-variant-numeric: tabular-nums;
+}
+
+.clock-digit {
+  display: inline-block;
+  animation: clockTick 180ms ease-out;
+}
+
+@keyframes clockTick {
+  from {
+    opacity: 0.5;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ui-body .text-[10px],
+.ui-body .text-[11px],
+.ui-body .text-[12px],
+.ui-body .text-xs,
+.ui-body .text-sm,
+.ui-body .text-lg {
+  font-size: inherit;
 }
 
 .scanlines {
@@ -111,18 +153,18 @@ select {
 .volume-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 8px;
+  width: 12px;
   height: 8px;
-  border-radius: 999px;
-  background-color: var(--color-contrast);
+  border-radius: 2px;
+  background-color: #ffffff;
   border: 1px solid var(--color-subtle-strong);
 }
 
 .volume-slider::-moz-range-thumb {
-  width: 8px;
+  width: 12px;
   height: 8px;
-  border-radius: 999px;
-  background-color: var(--color-contrast);
+  border-radius: 2px;
+  background-color: #ffffff;
   border: 1px solid var(--color-subtle-strong);
 }
 
@@ -151,11 +193,13 @@ select {
   display: grid;
   gap: 0.4rem;
   line-height: 1.4;
+  padding: 0;
   overflow: hidden;
   max-height: 0;
   opacity: 0;
   transform: translateY(-4px);
-  transition: max-height 260ms ease, opacity 200ms ease, transform 200ms ease;
+  transition: max-height 260ms ease, opacity 200ms ease, transform 200ms ease,
+    padding 260ms ease;
 }
 
 .schedule-details>* {
@@ -166,6 +210,7 @@ select {
   max-height: 220px;
   opacity: 1;
   transform: translateY(0);
+  padding: 0 1rem 0.4rem;
 }
 
 @keyframes fadeIn {

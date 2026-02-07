@@ -138,6 +138,8 @@ function App() {
   const videoFrameRef = useRef<HTMLDivElement | null>(null)
   const chatScrollRef = useRef<HTMLDivElement | null>(null)
   const chatStreamRef = useRef<EventSource | null>(null)
+  const [nowTime, setNowTime] = useState(() => new Date())
+  const [infoOpen, setInfoOpen] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
   const [volume, setVolume] = useState(0.6)
   const [controlsVisible, setControlsVisible] = useState(false)
@@ -390,6 +392,33 @@ function App() {
       console.warn('Failed to read stored chat auth', error)
     }
   }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowTime(new Date())
+    }, 1000)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!infoOpen) {
+      return
+    }
+
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setInfoOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKey)
+    return () => {
+      window.removeEventListener('keydown', handleKey)
+    }
+  }, [infoOpen])
 
   const clearAuth = () => {
     setAuthToken(null)
@@ -724,7 +753,7 @@ function App() {
   }
 
   return (
-    <div className="h-dvh w-full bg-[#050505] text-zinc-100">
+    <div className="ui-body h-dvh w-full bg-[#050505] text-zinc-100">
       <div className="flex h-full w-full flex-col border border-zinc-800">
         <header className="flex h-12 items-center gap-3 border-b border-zinc-800 px-4 text-xs text-zinc-300">
           <img
@@ -732,7 +761,15 @@ function App() {
             alt="andromeda"
             className="h-3.5 w-3.5 object-contain"
           />
-          <span className="text-lg font-extrabold">andromeda</span>
+          <span className="ui-header font-extrabold">andromeda</span>
+          <button
+            type="button"
+            className="ml-auto inline-flex items-center gap-2 text-zinc-500 transition hover:text-zinc-200 cursor-pointer"
+            onClick={() => setInfoOpen(true)}
+            aria-label="About andromeda"
+          >
+            info
+          </button>
         </header>
         <div className="layout-shell flex min-h-0 flex-1 flex-col animate-[fadeIn_700ms_ease-out] motion-reduce:animate-none lg:grid lg:grid-cols-[auto_minmax(240px,1fr)]">
           <div className="flex min-h-0 items-stretch lg:h-full">
@@ -759,14 +796,14 @@ function App() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="pointer-events-auto border border-zinc-700 p-1 text-zinc-200 transition hover:border-zinc-400"
+                    className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center border border-zinc-700 text-zinc-200 transition hover:border-zinc-400"
                     onClick={handleToggleMute}
                     aria-label={isMuted ? 'Unmute' : 'Mute'}
                   >
                     {isMuted ? (
                       <svg
                         viewBox="0 0 24 24"
-                        className="h-4 w-4"
+                        className="h-5 w-5"
                         fill="none"
                         stroke="currentColor"
                         strokeWidth="1.5"
@@ -781,7 +818,7 @@ function App() {
                     ) : (
                       <svg
                         viewBox="0 0 24 24"
-                        className="h-4 w-4"
+                        className="h-5 w-5"
                         fill="none"
                         stroke="currentColor"
                         strokeWidth="1.5"
@@ -835,7 +872,25 @@ function App() {
           <aside className="flex min-h-0 flex-1 flex-col border-t border-zinc-800 lg:border-l lg:border-t-0">
             <div className="flex min-h-0 flex-[1] flex-col">
               <header className="flex h-12 items-center border-b border-zinc-800 px-4 text-xs text-zinc-300">
-                <span className="text-lg font-extrabold">schedule</span>
+                <span className="ui-header font-extrabold">schedule</span>
+                <span className="clock ml-auto text-zinc-500">
+                  {nowTime
+                    .toLocaleTimeString([], {
+                      hour12: true,
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })
+                    .split('')
+                    .map((char, index) => (
+                      <span
+                        key={`${index}-${char}`}
+                        className={/\d/.test(char) ? 'clock-digit' : undefined}
+                      >
+                        {char}
+                      </span>
+                    ))}
+                </span>
               </header>
               <div className="scrollbar-minimal min-h-0 flex-1 overflow-y-auto">
                 <ul className="divide-y divide-zinc-800">
@@ -847,11 +902,11 @@ function App() {
                     return (
                       <li
                         key={itemKey}
-                        className="px-4 py-3 text-sm text-zinc-300"
+                        className="text-zinc-300"
                       >
                         <button
                           type="button"
-                          className={`schedule-row flex w-full items-center justify-between gap-3 rounded-md text-left text-zinc-100 transition ${hasDetails ? 'hover:bg-zinc-900/60 hover:text-white' : ''}`}
+                          className={`schedule-row flex w-full items-center justify-between gap-3 rounded-md px-4 py-3 text-left text-zinc-100 transition ${hasDetails ? 'hover:bg-zinc-900/60 hover:text-white' : ''}`}
                           onClick={() =>
                             setExpandedScheduleKey((prev) =>
                               prev === itemKey ? null : itemKey,
@@ -862,17 +917,17 @@ function App() {
                           data-clickable={hasDetails}
                           disabled={!hasDetails}
                         >
-                          <span className="truncate text-xs text-zinc-400">
+                          <span className="truncate text-zinc-400">
                             {item.title}
                           </span>
                           <span className="flex items-center gap-2">
                             {item.live ? (
-                              <span className="flex items-center gap-2 text-[11px] text-zinc-200">
+                              <span className="flex items-center gap-2 text-zinc-200">
                                 <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--color-accent-red)]" />
                                 live
                               </span>
                             ) : (
-                              <span className="text-[11px] text-zinc-500">
+                              <span className="text-zinc-500">
                                 {item.time}
                               </span>
                             )}
@@ -917,10 +972,10 @@ function App() {
             </div>
 
             <div className="flex min-h-0 flex-[2] flex-col border-t border-zinc-800">
-              <header className="flex h-12 items-center border-b border-zinc-800 px-4 text-xs text-zinc-300">
-                <span className="text-lg font-extrabold">chat</span>
+              <header className="flex h-12 items-center border-b border-zinc-800 px-4 text-zinc-300">
+                <span className="ui-header font-extrabold">chat</span>
                 {authNickname && (
-                  <span className="ml-auto text-[11px] text-zinc-500">
+                  <span className="ml-auto text-zinc-500">
                     signed in as <span className="text-zinc-200">{authNickname}</span>
                   </span>
                 )}
@@ -933,14 +988,14 @@ function App() {
                   >
                     <ul className="divide-y divide-zinc-800">
                       {chatMessages.length === 0 && !chatLoading && (
-                        <li className="px-4 py-6 text-xs text-zinc-500">
+                        <li className="px-4 py-6 text-zinc-500">
                           No messages yet.
                         </li>
                       )}
                       {chatMessages.map((entry) => (
                         <li
                           key={`${entry.id}`}
-                          className="px-4 py-2 text-xs text-zinc-400"
+                          className="px-4 py-2 text-zinc-400"
                         >
                           <span className="text-zinc-100">{entry.nickname}</span>{' '}
                           <span>{entry.body}</span>
@@ -950,7 +1005,7 @@ function App() {
                   </div>
                   <form
                     onSubmit={handleSendMessage}
-                    className="border-t border-zinc-800 px-4 py-3 text-[11px]"
+                    className="border-t border-zinc-800 px-4 py-3"
                   >
                     <div className="flex items-center gap-2">
                       <input
@@ -958,30 +1013,30 @@ function App() {
                         onChange={(event) => setMessageBody(event.target.value)}
                         placeholder="Type a message"
                         disabled={Boolean(cooldownUntil)}
-                        className="h-9 flex-1 border border-zinc-700 bg-black/40 px-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none disabled:opacity-60"
+                        className="h-9 flex-1 border border-zinc-700 bg-black/40 px-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none disabled:opacity-60"
                       />
                       <button
                         type="submit"
                         disabled={Boolean(cooldownUntil)}
-                        className="h-9 border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="h-9 border border-zinc-700 bg-zinc-900 px-3 text-zinc-100 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         send
                       </button>
                     </div>
                     {chatError && (
-                      <div className="mt-2 text-[11px] text-[var(--color-accent-red)]">
+                      <div className="mt-2 text-[var(--color-accent-red)]">
                         {chatError}
                         {cooldownRemaining !== null && (
-                          <span className="ml-1 text-[10px] text-[var(--color-accent-red)]">
+                          <span className="ml-1 text-[var(--color-accent-red)]">
                             ({cooldownRemaining}s)
                           </span>
                         )}
                       </div>
                     )}
                     {chatLoading && (
-                      <div className="mt-2 text-[11px] text-zinc-500">updating…</div>
+                      <div className="mt-2 text-zinc-500">updating…</div>
                     )}
-                    <div className="mt-2 text-[11px] text-zinc-500">
+                    <div className="mt-2 text-zinc-500">
                       <button
                         type="button"
                         className="text-zinc-400 hover:text-zinc-200"
@@ -992,7 +1047,7 @@ function App() {
                       {authNickname === ADMIN_USER && (
                         <button
                           type="button"
-                          className="ml-3 text-[11px] text-zinc-400 hover:text-zinc-200"
+                          className="ml-3 text-zinc-400 hover:text-zinc-200"
                           onClick={handleAdminClear}
                         >
                           clear chat
@@ -1009,14 +1064,14 @@ function App() {
                   >
                     <ul className="divide-y divide-zinc-800">
                       {chatMessages.length === 0 && !chatLoading && (
-                        <li className="px-4 py-6 text-xs text-zinc-500">
+                        <li className="px-4 py-6 text-zinc-500">
                           No messages yet.
                         </li>
                       )}
                       {chatMessages.map((entry) => (
                         <li
                           key={`${entry.id}`}
-                          className="px-4 py-2 text-xs text-zinc-400"
+                          className="px-4 py-2 text-zinc-400"
                         >
                           <span className="text-zinc-100">{entry.nickname}</span>{' '}
                           <span>{entry.body}</span>
@@ -1027,27 +1082,27 @@ function App() {
                   <form
                     key={authMode}
                     onSubmit={handleAuthSubmit}
-                    className="flex flex-col gap-3 border-t border-zinc-800 px-4 py-4 text-[11px] animate-[fadeIn_220ms_ease-out] motion-reduce:animate-none"
+                    className="flex flex-col gap-3 border-t border-zinc-800 px-4 py-4 animate-[fadeIn_220ms_ease-out] motion-reduce:animate-none"
                   >
-                    <div className="text-xs text-zinc-400">
+                    <div className="text-zinc-400">
                       {authMode === 'login' ? 'sign in to chat' : 'create an account'}
                     </div>
                     <input
                       value={authNicknameInput}
                       onChange={(event) => setAuthNicknameInput(event.target.value)}
                       placeholder="username"
-                      className="h-9 border border-zinc-700 bg-black/40 px-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
+                      className="h-9 border border-zinc-700 bg-black/40 px-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
                     />
                     <input
                       type="password"
                       value={authPasswordInput}
                       onChange={(event) => setAuthPasswordInput(event.target.value)}
                       placeholder="password"
-                      className="h-9 border border-zinc-700 bg-black/40 px-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
+                      className="h-9 border border-zinc-700 bg-black/40 px-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
                     />
                     <button
                       type="submit"
-                      className="h-9 border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="h-9 border border-zinc-700 bg-zinc-900 px-3 text-zinc-100 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={authLoading}
                     >
                       {authLoading
@@ -1057,13 +1112,13 @@ function App() {
                           : 'create account'}
                     </button>
                     {authError && (
-                      <div className="text-[11px] text-[var(--color-accent-red)]">{authError}</div>
+                      <div className="text-[var(--color-accent-red)]">{authError}</div>
                     )}
                     {chatError && (
-                      <div className="text-[11px] text-[var(--color-accent-red)]">{chatError}</div>
+                      <div className="text-[var(--color-accent-red)]">{chatError}</div>
                     )}
                     {chatLoading && (
-                      <div className="text-[11px] text-zinc-500">updating…</div>
+                      <div className="text-zinc-500">updating…</div>
                     )}
                     <button
                       type="button"
@@ -1077,7 +1132,7 @@ function App() {
                       {authMode === 'login'
                         ? 'need an account? create one'
                         : 'already have an account? sign in'}
-                      <span className="text-[10px] text-zinc-500 transition-colors duration-200 ease-out group-hover:text-zinc-300">
+                      <span className="text-zinc-500 transition-colors duration-200 ease-out group-hover:text-zinc-300">
                         →
                       </span>
                     </button>
@@ -1088,6 +1143,45 @@ function App() {
           </aside>
         </div>
       </div>
+      {infoOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-lg border border-zinc-800 bg-[#050505] p-6 text-zinc-200 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div className="ui-header font-extrabold">about</div>
+              <button
+                type="button"
+                className="text-zinc-500 transition hover:text-zinc-200 cursor-pointer"
+                onClick={() => setInfoOpen(false)}
+                aria-label="Close info"
+              >
+                close
+              </button>
+            </div>
+            <div>
+              <p className="mt-3 text-zinc-400">
+                andromeda is a 24/7 experimental anime stream with a live
+                schedule and community chat, built with:
+              </p>
+              <ul className="mt-3 space-y-1 text-zinc-400">
+                <li>- typescript</li>
+                <li>- react</li>
+                <li>- tailwind</li>
+                <li>- vite</li>
+                <li>- bun</li>
+                <li>- nginx</li>
+              </ul>
+              <p className="mt-3 text-zinc-400">
+                it has a simple account system and a custom chat backend with
+                a rolling message history.
+              </p>
+              <p className="mt-3 text-zinc-400">
+                sign in or create an account to join the chat - no email or verification needed.
+                passwords are securely hashed and salted before being stored.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
