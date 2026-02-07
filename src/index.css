@@ -179,3 +179,16 @@ select {
     transform: translateY(0);
   }
 }
+
+@media (max-aspect-ratio: 1/1) {
+  .layout-shell {
+    display: flex !important;
+    flex-direction: column;
+  }
+
+  .video-frame {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 60vh !important;
+  }
+}

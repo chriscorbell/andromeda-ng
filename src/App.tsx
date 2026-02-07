@@ -649,11 +649,11 @@ function App() {
           />
           <span className="text-lg font-extrabold">andromeda</span>
         </header>
-        <div className="grid min-h-0 flex-1 grid-cols-[auto_minmax(240px,1fr)] animate-[fadeIn_700ms_ease-out] motion-reduce:animate-none">
-          <div className="flex h-full min-h-0 items-stretch">
+        <div className="layout-shell flex min-h-0 flex-1 flex-col animate-[fadeIn_700ms_ease-out] motion-reduce:animate-none lg:grid lg:grid-cols-[auto_minmax(240px,1fr)]">
+          <div className="flex min-h-0 items-stretch lg:h-full">
             <div
               ref={videoFrameRef}
-              className="scanlines relative aspect-[4/3] h-full max-h-full w-auto overflow-hidden bg-black"
+              className="video-frame scanlines relative aspect-[4/3] h-auto w-full max-h-[60vh] overflow-hidden bg-black lg:h-full lg:w-auto lg:max-h-full"
               onMouseMove={showControls}
               onMouseEnter={showControls}
               onMouseLeave={scheduleHideControls}
@@ -747,8 +747,8 @@ function App() {
             </div>
           </div>
 
-          <aside className="flex min-h-0 flex-col border-l border-zinc-800">
-            <div className="flex min-h-0 flex-1 flex-col">
+          <aside className="flex min-h-0 flex-1 flex-col border-t border-zinc-800 lg:border-l lg:border-t-0">
+            <div className="flex min-h-0 flex-[1] flex-col">
               <header className="flex h-12 items-center border-b border-zinc-800 px-4 text-xs text-zinc-300">
                 <span className="text-lg font-extrabold">schedule</span>
               </header>
@@ -831,7 +831,7 @@ function App() {
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col border-t border-zinc-800">
+            <div className="flex min-h-0 flex-[2] flex-col border-t border-zinc-800">
               <header className="flex h-12 items-center border-b border-zinc-800 px-4 text-xs text-zinc-300">
                 <span className="text-lg font-extrabold">chat</span>
                 {authNickname && (
