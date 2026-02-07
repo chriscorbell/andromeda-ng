@@ -5,6 +5,8 @@ import andromedaIcon from './assets/andromeda.png'
 const HLS_URL = '/iptv/session/1/hls.m3u8'
 const CHAT_API_URL = '/chat'
 const CHAT_STORAGE_KEY = 'andromeda-chat-auth'
+const ADMIN_USER = 'andromedatv'
+const ADMIN_TOKEN_KEY = 'andromeda-chat-admin-token'
 
 type ScheduleItem = {
   title: string
@@ -157,6 +159,8 @@ function App() {
   const [messageBody, setMessageBody] = useState('')
   const [chatError, setChatError] = useState<string | null>(null)
   const [chatLoading, setChatLoading] = useState(false)
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null)
+  const [cooldownRemaining, setCooldownRemaining] = useState<number | null>(null)
 
   useEffect(() => {
     const video = videoRef.current
@@ -555,6 +559,28 @@ function App() {
     chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
   }, [chatMessages.length])
 
+  useEffect(() => {
+    if (!cooldownUntil) {
+      setCooldownRemaining(null)
+      return
+    }
+
+    const updateRemaining = () => {
+      const remaining = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000))
+      setCooldownRemaining(remaining)
+      if (remaining === 0) {
+        setCooldownUntil(null)
+      }
+    }
+
+    updateRemaining()
+    const timer = window.setInterval(updateRemaining, 1000)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [cooldownUntil])
+
   const handleAuthSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setAuthError(null)
@@ -604,6 +630,11 @@ function App() {
       return
     }
 
+    if (cooldownUntil && Date.now() < cooldownUntil) {
+      setChatError("slow down, don't spam!")
+      return
+    }
+
     const trimmed = messageBody.trim()
     if (!trimmed) {
       return
@@ -626,15 +657,69 @@ function App() {
         return
       }
 
-      if (!response.ok) {
-        throw new Error('Failed to send message')
+      const payload = (await response.json()) as {
+        error?: string
+        cooldownSeconds?: number
       }
 
-      await response.json()
+      if (!response.ok) {
+        if (response.status === 429 && payload.cooldownSeconds) {
+          setCooldownUntil(Date.now() + payload.cooldownSeconds * 1000)
+          setChatError(payload.error || "slow down, don't spam!")
+          return
+        }
+        setChatError(payload.error || 'Message failed to send.')
+        return
+      }
+
       setMessageBody('')
     } catch (error) {
       console.warn('Failed to send chat message', error)
       setChatError('Message failed to send.')
+    }
+  }
+
+  const handleAdminClear = async () => {
+    if (authNickname !== ADMIN_USER) {
+      return
+    }
+
+    const confirmed = window.confirm('Clear chat history?')
+    if (!confirmed) {
+      return
+    }
+
+    let adminToken = window.localStorage.getItem(ADMIN_TOKEN_KEY) || ''
+    if (!adminToken) {
+      adminToken = window.prompt('Admin token') || ''
+      if (!adminToken) {
+        return
+      }
+      window.localStorage.setItem(ADMIN_TOKEN_KEY, adminToken)
+    }
+
+    try {
+      const response = await fetch(`${CHAT_API_URL}/admin/clear`, {
+        method: 'POST',
+        headers: {
+          'X-Admin-Token': adminToken,
+        },
+      })
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          window.localStorage.removeItem(ADMIN_TOKEN_KEY)
+          setChatError('Admin token invalid.')
+          return
+        }
+        setChatError('Failed to clear chat history.')
+        return
+      }
+
+      setChatError(null)
+    } catch (error) {
+      console.warn('Failed to clear chat history', error)
+      setChatError('Failed to clear chat history.')
     }
   }
 
@@ -872,11 +957,13 @@ function App() {
                         value={messageBody}
                         onChange={(event) => setMessageBody(event.target.value)}
                         placeholder="Type a message"
-                        className="h-9 flex-1 border border-zinc-700 bg-black/40 px-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
+                        disabled={Boolean(cooldownUntil)}
+                        className="h-9 flex-1 border border-zinc-700 bg-black/40 px-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none disabled:opacity-60"
                       />
                       <button
                         type="submit"
-                        className="h-9 border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100 transition hover:border-zinc-500"
+                        disabled={Boolean(cooldownUntil)}
+                        className="h-9 border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         send
                       </button>
@@ -884,6 +971,11 @@ function App() {
                     {chatError && (
                       <div className="mt-2 text-[11px] text-[var(--color-accent-red)]">
                         {chatError}
+                        {cooldownRemaining !== null && (
+                          <span className="ml-1 text-[10px] text-[var(--color-accent-red)]">
+                            ({cooldownRemaining}s)
+                          </span>
+                        )}
                       </div>
                     )}
                     {chatLoading && (
@@ -897,6 +989,15 @@ function App() {
                       >
                         sign out
                       </button>
+                      {authNickname === ADMIN_USER && (
+                        <button
+                          type="button"
+                          className="ml-3 text-[11px] text-zinc-400 hover:text-zinc-200"
+                          onClick={handleAdminClear}
+                        >
+                          clear chat
+                        </button>
+                      )}
                     </div>
                   </form>
                 </>

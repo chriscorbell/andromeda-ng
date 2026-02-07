@@ -26,6 +26,14 @@ type StreamClient = {
 
 const streamClients = new Set<StreamClient>();
 let heartbeatTimer: NodeJS.Timeout | null = null;
+const rateLimits = new Map<
+    string,
+    { timestamps: number[]; cooldownUntil?: number }
+>();
+
+const RATE_LIMIT_MAX = 5;
+const RATE_WINDOW_MS = 10_000;
+const COOLDOWN_MS = 60_000;
 
 function validateNickname(value: string): boolean {
     return /^[a-zA-Z0-9_-]{3,24}$/.test(value);
@@ -37,6 +45,40 @@ function validatePassword(value: string): boolean {
 
 function validateMessage(value: string): boolean {
     return value.length >= 1 && value.length <= 500;
+}
+
+function containsUrl(value: string): boolean {
+    return /(https?:\/\/|www\.)\S+/i.test(value) ||
+        /\b([a-z0-9-]+\.)+[a-z]{2,}(\/\S*)?/i.test(value);
+}
+
+function checkRateLimit(nickname: string, now: number) {
+    const entry = rateLimits.get(nickname) || { timestamps: [] };
+    const recent = entry.timestamps.filter(
+        (timestamp) => now - timestamp < RATE_WINDOW_MS
+    );
+
+    if (entry.cooldownUntil && now < entry.cooldownUntil) {
+        rateLimits.set(nickname, { ...entry, timestamps: recent });
+        const remainingMs = entry.cooldownUntil - now;
+        return {
+            allowed: false,
+            cooldownSeconds: Math.ceil(remainingMs / 1000),
+        };
+    }
+
+    if (recent.length >= RATE_LIMIT_MAX) {
+        const cooldownUntil = now + COOLDOWN_MS;
+        rateLimits.set(nickname, { timestamps: recent, cooldownUntil });
+        return {
+            allowed: false,
+            cooldownSeconds: Math.ceil(COOLDOWN_MS / 1000),
+        };
+    }
+
+    recent.push(now);
+    rateLimits.set(nickname, { timestamps: recent });
+    return { allowed: true };
 }
 
 function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
@@ -261,7 +303,21 @@ async function main() {
             return res.status(400).json({ error: "Invalid message" });
         }
 
+        if (containsUrl(body)) {
+            return res.status(400).json({ error: "Links are not allowed" });
+        }
+
         const nickname = req.user?.nickname || "";
+        const now = Date.now();
+        const limit = checkRateLimit(nickname, now);
+        if (!limit.allowed) {
+            const cooldownSeconds = limit.cooldownSeconds || 0;
+            return res.status(429).json({
+                error: "slow down, don't spam!",
+                cooldownSeconds,
+                retryAt: new Date(now + cooldownSeconds * 1000).toISOString(),
+            });
+        }
         const createdAt = new Date().toISOString();
 
         const result = await db.run(
