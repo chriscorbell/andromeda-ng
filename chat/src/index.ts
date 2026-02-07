@@ -231,6 +231,30 @@ async function main() {
         return undefined;
     });
 
+    app.get("/messages/public/stream", (_req: Request, res: Response) => {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.flushHeaders();
+
+        res.write("retry: 5000\n\n");
+        writeSseEvent(res, "ready", { ok: true });
+
+        const client: StreamClient = { res };
+        streamClients.add(client);
+        startHeartbeat();
+
+        _req.on("close", () => {
+            streamClients.delete(client);
+            if (streamClients.size === 0 && heartbeatTimer) {
+                clearInterval(heartbeatTimer);
+                heartbeatTimer = null;
+            }
+        });
+
+        return undefined;
+    });
+
     app.post("/messages", requireAuth, async (req: AuthedRequest, res: Response) => {
         const body = String(req.body?.body || "").trim();
         if (!validateMessage(body)) {

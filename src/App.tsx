@@ -2,10 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import andromedaIcon from './assets/andromeda.png'
 
-const HLS_URL =
-  'https://aex.andromedatv.cc/iptv/channel/1.m3u8?mode=segmenter'
-const CHAT_API_URL =
-  import.meta.env.VITE_CHAT_API_URL || 'http://localhost:3001'
+const HLS_URL = '/iptv/session/1/hls.m3u8'
+const CHAT_API_URL = '/chat'
 const CHAT_STORAGE_KEY = 'andromeda-chat-auth'
 
 type ScheduleItem = {
@@ -201,7 +199,7 @@ function App() {
           window.clearTimeout(scheduleTimeoutRef.current)
         }
 
-        const response = await fetch('https://aex.andromedatv.cc/iptv/xmltv.xml')
+        const response = await fetch('/iptv/xmltv.xml')
         if (!response.ok) {
           return
         }
@@ -463,12 +461,52 @@ function App() {
         chatStreamRef.current = null
       }
       void fetchPublicMessages()
-      return
+      const publicStreamUrl = new URL(
+        `${CHAT_API_URL}/messages/public/stream`,
+        window.location.origin,
+      )
+      const publicStream = new EventSource(publicStreamUrl.toString())
+      chatStreamRef.current = publicStream
+
+      publicStream.addEventListener('ready', () => {
+        setChatError(null)
+      })
+
+      publicStream.addEventListener('message', (event) => {
+        try {
+          const message = JSON.parse(event.data) as ChatMessage
+          setChatMessages((prev) => {
+            if (prev.some((entry) => entry.id === message.id)) {
+              return prev
+            }
+            const next = [...prev, message]
+            return next.length > 100 ? next.slice(-100) : next
+          })
+          setChatError(null)
+        } catch (error) {
+          console.warn('Failed to parse chat message', error)
+        }
+      })
+
+      publicStream.addEventListener('clear', () => {
+        setChatMessages([])
+      })
+
+      publicStream.addEventListener('error', () => {
+        setChatError('Chat connection lost. Reconnecting...')
+      })
+
+      return () => {
+        publicStream.close()
+        if (chatStreamRef.current === publicStream) {
+          chatStreamRef.current = null
+        }
+      }
     }
 
     void fetchMessages()
 
-    const streamUrl = new URL(`${CHAT_API_URL}/messages/stream`)
+    const streamUrl = new URL(`${CHAT_API_URL}/messages/stream`, window.location.origin)
     streamUrl.searchParams.set('token', authToken)
     const stream = new EventSource(streamUrl.toString())
     chatStreamRef.current = stream
