@@ -56,6 +56,14 @@ select {
   font-family: inherit;
 }
 
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
 #root {
   height: 100dvh;
   overflow: hidden;
@@ -92,9 +100,9 @@ select {
   }
 }
 
-.ui-body .text-[10px],
-.ui-body .text-[11px],
-.ui-body .text-[12px],
+.ui-body .text-\[10px\],
+.ui-body .text-\[11px\],
+.ui-body .text-\[12px\],
 .ui-body .text-xs,
 .ui-body .text-sm,
 .ui-body .text-lg {
@@ -187,6 +195,20 @@ select {
 
 .schedule-row[data-expanded='true'] .schedule-chevron {
   transform: rotate(180deg);
+}
+
+details[data-admin-menu] .admin-menu {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+  pointer-events: none;
+  transform-origin: top right;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+details[data-admin-menu][open] .admin-menu {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
 }
 
 .schedule-details {

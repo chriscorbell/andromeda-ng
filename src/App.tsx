@@ -25,6 +25,21 @@ type ChatMessage = {
   created_at: string
 }
 
+type AdminAction =
+  | { kind: 'clear' }
+  | { kind: 'delete'; messageId: number }
+  | { kind: 'warn'; messageId: number }
+  | { kind: 'ban'; nickname: string }
+  | { kind: 'unban'; nickname: string }
+  | { kind: 'delete-user'; nickname: string }
+
+type AdminUser = {
+  nickname: string
+  created_at: string
+}
+
+type AdminMenuView = 'main' | 'active' | 'banned'
+
 const fallbackSchedule: ScheduleItem[] = [
   {
     title: 'Angel Cop',
@@ -140,10 +155,13 @@ function App() {
   const chatStreamRef = useRef<EventSource | null>(null)
   const [nowTime, setNowTime] = useState(() => new Date())
   const [infoOpen, setInfoOpen] = useState(false)
+  const [infoVisible, setInfoVisible] = useState(false)
+  const [infoActive, setInfoActive] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
   const [volume, setVolume] = useState(0.6)
   const [controlsVisible, setControlsVisible] = useState(false)
   const hideTimeoutRef = useRef<number | null>(null)
+  const infoCloseTimeoutRef = useRef<number | null>(null)
   const [schedule, setSchedule] = useState<ScheduleItem[]>(fallbackSchedule)
   const [expandedScheduleKey, setExpandedScheduleKey] = useState<string | null>(
     null,
@@ -160,9 +178,30 @@ function App() {
   const [authLoading, setAuthLoading] = useState(false)
   const [messageBody, setMessageBody] = useState('')
   const [chatError, setChatError] = useState<string | null>(null)
+  const [chatNotice, setChatNotice] = useState<string | null>(null)
   const [chatLoading, setChatLoading] = useState(false)
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null)
   const [cooldownRemaining, setCooldownRemaining] = useState<number | null>(null)
+  const [adminAction, setAdminAction] = useState<AdminAction | null>(null)
+  const [adminConfirmOpen, setAdminConfirmOpen] = useState(false)
+  const [adminTokenOpen, setAdminTokenOpen] = useState(false)
+  const [adminTokenInput, setAdminTokenInput] = useState('')
+  const [adminTokenError, setAdminTokenError] = useState<string | null>(null)
+  const [adminConfirmVisible, setAdminConfirmVisible] = useState(false)
+  const [adminConfirmActive, setAdminConfirmActive] = useState(false)
+  const [adminTokenVisible, setAdminTokenVisible] = useState(false)
+  const [adminTokenActive, setAdminTokenActive] = useState(false)
+  const adminConfirmTimeoutRef = useRef<number | null>(null)
+  const adminTokenTimeoutRef = useRef<number | null>(null)
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false)
+  const [adminMenuVisible, setAdminMenuVisible] = useState(false)
+  const [adminMenuActive, setAdminMenuActive] = useState(false)
+  const adminMenuTimeoutRef = useRef<number | null>(null)
+  const [adminMenuView, setAdminMenuView] = useState<AdminMenuView>('main')
+  const [adminMenuViewAnimating, setAdminMenuViewAnimating] = useState(false)
+  const [adminUserList, setAdminUserList] = useState<AdminUser[]>([])
+  const [adminUserSearch, setAdminUserSearch] = useState('')
+  const [adminUserLoading, setAdminUserLoading] = useState(false)
 
   useEffect(() => {
     const video = videoRef.current
@@ -420,12 +459,163 @@ function App() {
     }
   }, [infoOpen])
 
+  useEffect(() => {
+    if (infoCloseTimeoutRef.current) {
+      window.clearTimeout(infoCloseTimeoutRef.current)
+      infoCloseTimeoutRef.current = null
+    }
+
+    if (infoOpen) {
+      setInfoVisible(true)
+      setInfoActive(false)
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          setInfoActive(true)
+        })
+      })
+      return
+    }
+
+    if (infoVisible) {
+      setInfoActive(false)
+      infoCloseTimeoutRef.current = window.setTimeout(() => {
+        setInfoVisible(false)
+      }, 220)
+    }
+  }, [infoOpen, infoVisible])
+
+  useEffect(() => {
+    return () => {
+      if (infoCloseTimeoutRef.current) {
+        window.clearTimeout(infoCloseTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (adminConfirmTimeoutRef.current) {
+      window.clearTimeout(adminConfirmTimeoutRef.current)
+      adminConfirmTimeoutRef.current = null
+    }
+
+    if (adminConfirmOpen) {
+      setAdminConfirmVisible(true)
+      setAdminConfirmActive(false)
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          setAdminConfirmActive(true)
+        })
+      })
+      return
+    }
+
+    if (adminConfirmVisible) {
+      setAdminConfirmActive(false)
+      adminConfirmTimeoutRef.current = window.setTimeout(() => {
+        setAdminConfirmVisible(false)
+      }, 200)
+    }
+  }, [adminConfirmOpen, adminConfirmVisible])
+
+  useEffect(() => {
+    if (adminTokenTimeoutRef.current) {
+      window.clearTimeout(adminTokenTimeoutRef.current)
+      adminTokenTimeoutRef.current = null
+    }
+
+    if (adminTokenOpen) {
+      setAdminTokenVisible(true)
+      setAdminTokenActive(false)
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          setAdminTokenActive(true)
+        })
+      })
+      return
+    }
+
+    if (adminTokenVisible) {
+      setAdminTokenActive(false)
+      adminTokenTimeoutRef.current = window.setTimeout(() => {
+        setAdminTokenVisible(false)
+      }, 200)
+    }
+  }, [adminTokenOpen, adminTokenVisible])
+
+  useEffect(() => {
+    return () => {
+      if (adminConfirmTimeoutRef.current) {
+        window.clearTimeout(adminConfirmTimeoutRef.current)
+      }
+      if (adminTokenTimeoutRef.current) {
+        window.clearTimeout(adminTokenTimeoutRef.current)
+      }
+      if (adminMenuTimeoutRef.current) {
+        window.clearTimeout(adminMenuTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (adminMenuTimeoutRef.current) {
+      window.clearTimeout(adminMenuTimeoutRef.current)
+      adminMenuTimeoutRef.current = null
+    }
+
+    if (adminMenuOpen) {
+      setAdminMenuVisible(true)
+      setAdminMenuActive(false)
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          setAdminMenuActive(true)
+        })
+      })
+      return
+    }
+
+    if (adminMenuVisible) {
+      setAdminMenuActive(false)
+      adminMenuTimeoutRef.current = window.setTimeout(() => {
+        setAdminMenuVisible(false)
+        setAdminMenuView('main')
+        setAdminUserList([])
+        setAdminUserSearch('')
+      }, 200)
+    }
+  }, [adminMenuOpen, adminMenuVisible])
+
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (!target) {
+        return
+      }
+
+      if (target.closest('[data-admin-menu]')) {
+        return
+      }
+
+      document
+        .querySelectorAll<HTMLDetailsElement>('details[data-admin-menu][open]')
+        .forEach((element) => {
+          element.open = false
+        })
+    }
+
+    document.addEventListener('click', handleOutsideClick)
+    return () => {
+      document.removeEventListener('click', handleOutsideClick)
+    }
+  }, [])
+
   const clearAuth = () => {
     setAuthToken(null)
     setAuthNickname(null)
     setAuthNicknameInput('')
     setAuthPasswordInput('')
     setAuthError(null)
+    setChatNotice(null)
     if (chatStreamRef.current) {
       chatStreamRef.current.close()
       chatStreamRef.current = null
@@ -525,6 +715,69 @@ function App() {
         setChatMessages([])
       })
 
+      publicStream.addEventListener('delete', (event) => {
+        try {
+          const payload = JSON.parse(event.data) as { id?: number }
+          if (!payload.id) {
+            return
+          }
+          setChatMessages((prev) =>
+            prev.map((entry) =>
+              entry.id === payload.id
+                ? { ...entry, body: 'message deleted' }
+                : entry,
+            ),
+          )
+        } catch (error) {
+          console.warn('Failed to parse delete event', error)
+        }
+      })
+
+      publicStream.addEventListener('purge', (event) => {
+        try {
+          const payload = JSON.parse(event.data) as { nickname?: string }
+          if (!payload.nickname) {
+            return
+          }
+          setChatMessages((prev) =>
+            prev.map((entry) =>
+              entry.nickname === payload.nickname
+                ? { ...entry, body: 'message deleted' }
+                : entry,
+            ),
+          )
+        } catch (error) {
+          console.warn('Failed to parse purge event', error)
+        }
+      })
+
+      publicStream.addEventListener('warn', (event) => {
+        try {
+          const payload = JSON.parse(event.data) as { nickname?: string }
+          if (!payload.nickname || payload.nickname !== authNickname) {
+            return
+          }
+          setChatNotice('you have been warned for your previous message')
+        } catch (error) {
+          console.warn('Failed to parse warn event', error)
+        }
+      })
+
+      publicStream.addEventListener('ban', (event) => {
+        try {
+          const payload = JSON.parse(event.data) as { nickname?: string }
+          if (!payload.nickname) {
+            return
+          }
+          if (payload.nickname === authNickname) {
+            clearAuth()
+            setChatError('your account has been banned')
+          }
+        } catch (error) {
+          console.warn('Failed to parse ban event', error)
+        }
+      })
+
       publicStream.addEventListener('error', () => {
         setChatError('Chat connection lost. Reconnecting...')
       })
@@ -566,6 +819,69 @@ function App() {
 
     stream.addEventListener('clear', () => {
       setChatMessages([])
+    })
+
+    stream.addEventListener('delete', (event) => {
+      try {
+        const payload = JSON.parse(event.data) as { id?: number }
+        if (!payload.id) {
+          return
+        }
+        setChatMessages((prev) =>
+          prev.map((entry) =>
+            entry.id === payload.id
+              ? { ...entry, body: 'message deleted' }
+              : entry,
+          ),
+        )
+      } catch (error) {
+        console.warn('Failed to parse delete event', error)
+      }
+    })
+
+    stream.addEventListener('purge', (event) => {
+      try {
+        const payload = JSON.parse(event.data) as { nickname?: string }
+        if (!payload.nickname) {
+          return
+        }
+        setChatMessages((prev) =>
+          prev.map((entry) =>
+            entry.nickname === payload.nickname
+              ? { ...entry, body: 'message deleted' }
+              : entry,
+          ),
+        )
+      } catch (error) {
+        console.warn('Failed to parse purge event', error)
+      }
+    })
+
+    stream.addEventListener('warn', (event) => {
+      try {
+        const payload = JSON.parse(event.data) as { nickname?: string }
+        if (!payload.nickname || payload.nickname !== authNickname) {
+          return
+        }
+        setChatNotice('you have been warned for your previous message')
+      } catch (error) {
+        console.warn('Failed to parse warn event', error)
+      }
+    })
+
+    stream.addEventListener('ban', (event) => {
+      try {
+        const payload = JSON.parse(event.data) as { nickname?: string }
+        if (!payload.nickname) {
+          return
+        }
+        if (payload.nickname === authNickname) {
+          clearAuth()
+          setChatError('your account has been banned')
+        }
+      } catch (error) {
+        console.warn('Failed to parse ban event', error)
+      }
     })
 
     stream.addEventListener('error', () => {
@@ -641,6 +957,7 @@ function App() {
       setAuthNickname(payload.nickname)
       setAuthPasswordInput('')
       setMessageBody('')
+      setChatNotice(null)
       window.localStorage.setItem(
         CHAT_STORAGE_KEY,
         JSON.stringify({ nickname: payload.nickname, token: payload.token }),
@@ -708,49 +1025,389 @@ function App() {
     }
   }
 
-  const handleAdminClear = async () => {
+  const getStoredAdminToken = () => window.localStorage.getItem(ADMIN_TOKEN_KEY)
+
+  const openAdminConfirm = (action: AdminAction) => {
     if (authNickname !== ADMIN_USER) {
       return
     }
+    setAdminAction(action)
+    setAdminConfirmOpen(true)
+  }
 
-    const confirmed = window.confirm('Clear chat history?')
-    if (!confirmed) {
+  const performAdminAction = async (action: AdminAction, adminToken: string) => {
+    try {
+      if (action.kind === 'clear') {
+        const response = await fetch(`${CHAT_API_URL}/admin/clear`, {
+          method: 'POST',
+          headers: {
+            'X-Admin-Token': adminToken,
+          },
+        })
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.localStorage.removeItem(ADMIN_TOKEN_KEY)
+            setChatError('Admin token invalid.')
+            return
+          }
+          setChatError('Failed to clear chat history.')
+          return
+        }
+
+        setChatError(null)
+        return
+      }
+
+      if (action.kind === 'delete') {
+        const response = await fetch(
+          `${CHAT_API_URL}/admin/messages/${action.messageId}/delete`,
+          {
+            method: 'POST',
+            headers: {
+              'X-Admin-Token': adminToken,
+            },
+          },
+        )
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.localStorage.removeItem(ADMIN_TOKEN_KEY)
+            setChatError('Admin token invalid.')
+            return
+          }
+          setChatError('Failed to delete message.')
+          return
+        }
+
+        setChatMessages((prev) =>
+          prev.map((entry) =>
+            entry.id === action.messageId
+              ? { ...entry, body: 'message deleted' }
+              : entry,
+          ),
+        )
+        setChatError(null)
+        return
+      }
+
+      if (action.kind === 'warn') {
+        const response = await fetch(
+          `${CHAT_API_URL}/admin/messages/${action.messageId}/warn`,
+          {
+            method: 'POST',
+            headers: {
+              'X-Admin-Token': adminToken,
+            },
+          },
+        )
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.localStorage.removeItem(ADMIN_TOKEN_KEY)
+            setChatError('Admin token invalid.')
+            return
+          }
+          setChatError('Failed to warn user.')
+          return
+        }
+
+        setChatMessages((prev) =>
+          prev.map((entry) =>
+            entry.id === action.messageId
+              ? { ...entry, body: 'message deleted' }
+              : entry,
+          ),
+        )
+        setChatError(null)
+        return
+      }
+
+      if (action.kind === 'ban') {
+        const response = await fetch(
+          `${CHAT_API_URL}/admin/users/${encodeURIComponent(action.nickname)}/ban`,
+          {
+            method: 'POST',
+            headers: {
+              'X-Admin-Token': adminToken,
+            },
+          },
+        )
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.localStorage.removeItem(ADMIN_TOKEN_KEY)
+            setChatError('Admin token invalid.')
+            return
+          }
+          setChatError('Failed to ban user.')
+          return
+        }
+
+        setChatMessages((prev) =>
+          prev.map((entry) =>
+            entry.nickname === action.nickname
+              ? { ...entry, body: 'message deleted' }
+              : entry,
+          ),
+        )
+        setChatError(null)
+      }
+
+      if (action.kind === 'unban') {
+        const response = await fetch(
+          `${CHAT_API_URL}/admin/users/${encodeURIComponent(action.nickname)}/unban`,
+          {
+            method: 'POST',
+            headers: {
+              'X-Admin-Token': adminToken,
+            },
+          },
+        )
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.localStorage.removeItem(ADMIN_TOKEN_KEY)
+            setChatError('Admin token invalid.')
+            return
+          }
+          setChatError('Failed to unban user.')
+          return
+        }
+
+        setChatError(null)
+      }
+
+      if (action.kind === 'delete-user') {
+        const response = await fetch(
+          `${CHAT_API_URL}/admin/users/${encodeURIComponent(action.nickname)}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'X-Admin-Token': adminToken,
+            },
+          },
+        )
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.localStorage.removeItem(ADMIN_TOKEN_KEY)
+            setChatError('Admin token invalid.')
+            return
+          }
+          setChatError('Failed to delete user.')
+          return
+        }
+
+        setChatMessages((prev) =>
+          prev.filter((entry) => entry.nickname !== action.nickname),
+        )
+        setChatError(null)
+      }
+    } catch (error) {
+      console.warn('Failed to run admin action', error)
+      setChatError('Admin action failed.')
+    }
+  }
+
+  const confirmAdminAction = async () => {
+    setAdminConfirmOpen(false)
+    if (!adminAction) {
       return
     }
 
-    let adminToken = window.localStorage.getItem(ADMIN_TOKEN_KEY) || ''
+    const adminToken = getStoredAdminToken()
     if (!adminToken) {
-      adminToken = window.prompt('Admin token') || ''
-      if (!adminToken) {
-        return
-      }
-      window.localStorage.setItem(ADMIN_TOKEN_KEY, adminToken)
+      setAdminTokenInput('')
+      setAdminTokenError(null)
+      setAdminTokenOpen(true)
+      return
     }
 
+    await performAdminAction(adminAction, adminToken)
+    setAdminAction(null)
+  }
+
+  const submitAdminToken = async () => {
+    if (!adminAction) {
+      setAdminTokenOpen(false)
+      return
+    }
+
+    const token = adminTokenInput.trim()
+    if (!token) {
+      setAdminTokenError('Admin token required.')
+      return
+    }
+
+    window.localStorage.setItem(ADMIN_TOKEN_KEY, token)
+    setAdminTokenOpen(false)
+    setAdminTokenInput('')
+    setAdminTokenError(null)
+    await performAdminAction(adminAction, token)
+    setAdminAction(null)
+  }
+
+  const cancelAdminConfirm = () => {
+    setAdminConfirmOpen(false)
+    setAdminAction(null)
+  }
+
+  const cancelAdminToken = () => {
+    setAdminTokenOpen(false)
+    setAdminTokenInput('')
+    setAdminTokenError(null)
+    setAdminAction(null)
+  }
+
+  useEffect(() => {
+    if (!adminConfirmOpen && !adminTokenOpen && !adminMenuOpen) {
+      return
+    }
+
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (adminConfirmOpen) {
+          cancelAdminConfirm()
+        }
+        if (adminTokenOpen) {
+          cancelAdminToken()
+        }
+        if (adminMenuOpen) {
+          if (adminMenuView !== 'main') {
+            backToAdminMain()
+          } else {
+            closeAdminMenu()
+          }
+        }
+        return
+      }
+
+      if (event.key !== 'Enter') {
+        return
+      }
+
+      if (adminTokenOpen) {
+        void submitAdminToken()
+        return
+      }
+
+      if (adminConfirmOpen) {
+        void confirmAdminAction()
+      }
+    }
+
+    window.addEventListener('keydown', handleKey)
+    return () => {
+      window.removeEventListener('keydown', handleKey)
+    }
+  }, [adminConfirmOpen, adminTokenOpen, adminAction, adminMenuOpen, adminMenuView])
+
+  const closeAdminMenus = () => {
+    document
+      .querySelectorAll<HTMLDetailsElement>('details[data-admin-menu][open]')
+      .forEach((element) => {
+        element.open = false
+      })
+  }
+
+  const fetchAdminUsers = async (view: 'active' | 'banned') => {
+    const adminToken = getStoredAdminToken()
+    if (!adminToken) {
+      setAdminMenuOpen(false)
+      setAdminTokenInput('')
+      setAdminTokenError(null)
+      setAdminTokenOpen(true)
+      return
+    }
+
+    setAdminUserLoading(true)
     try {
-      const response = await fetch(`${CHAT_API_URL}/admin/clear`, {
-        method: 'POST',
-        headers: {
-          'X-Admin-Token': adminToken,
-        },
+      const endpoint = view === 'active' ? 'active' : 'banned'
+      const response = await fetch(`${CHAT_API_URL}/admin/users/${endpoint}`, {
+        headers: { 'X-Admin-Token': adminToken },
       })
 
       if (!response.ok) {
         if (response.status === 401) {
           window.localStorage.removeItem(ADMIN_TOKEN_KEY)
           setChatError('Admin token invalid.')
+          setAdminMenuOpen(false)
           return
         }
-        setChatError('Failed to clear chat history.')
+        setChatError('Failed to load user list.')
         return
       }
 
-      setChatError(null)
+      const payload = (await response.json()) as { users: AdminUser[] }
+      setAdminUserList(payload.users)
     } catch (error) {
-      console.warn('Failed to clear chat history', error)
-      setChatError('Failed to clear chat history.')
+      console.warn('Failed to fetch admin users', error)
+      setChatError('Failed to load user list.')
+    } finally {
+      setAdminUserLoading(false)
     }
   }
+
+  const openAdminMenuView = async (view: 'active' | 'banned') => {
+    setAdminUserSearch('')
+    setAdminMenuViewAnimating(true)
+    await new Promise((resolve) => window.setTimeout(resolve, 120))
+    setAdminMenuView(view)
+    await fetchAdminUsers(view)
+    window.requestAnimationFrame(() => {
+      setAdminMenuViewAnimating(false)
+    })
+  }
+
+  const backToAdminMain = () => {
+    setAdminMenuViewAnimating(true)
+    window.setTimeout(() => {
+      setAdminMenuView('main')
+      setAdminUserList([])
+      setAdminUserSearch('')
+      window.requestAnimationFrame(() => {
+        setAdminMenuViewAnimating(false)
+      })
+    }, 120)
+  }
+
+  const closeAdminMenu = () => {
+    setAdminMenuOpen(false)
+  }
+
+  const handleAdminUserAction = (action: AdminAction) => {
+    setAdminMenuOpen(false)
+    openAdminConfirm(action)
+  }
+
+  const adminConfirmTitle = adminAction
+    ? adminAction.kind === 'clear'
+      ? 'clear chat history?'
+      : adminAction.kind === 'delete'
+        ? 'delete this message?'
+        : adminAction.kind === 'warn'
+          ? 'delete and warn this user?'
+          : adminAction.kind === 'ban'
+            ? `ban ${adminAction.nickname}?`
+            : adminAction.kind === 'unban'
+              ? `unban ${adminAction.nickname}?`
+              : `delete user ${adminAction.nickname}?`
+    : ''
+
+  const adminConfirmBody = adminAction
+    ? adminAction.kind === 'clear'
+      ? 'this removes all messages, including system logs.'
+      : adminAction.kind === 'delete'
+        ? 'the message will be replaced with "message deleted".'
+        : adminAction.kind === 'warn'
+          ? 'the message will be deleted and the user will be warned.'
+          : adminAction.kind === 'ban'
+            ? 'the user will be banned and their messages will be redacted.'
+            : adminAction.kind === 'unban'
+              ? 'the user will be able to log in and chat again.'
+              : 'the user account and all their messages will be permanently deleted.'
+    : ''
 
   return (
     <div className="ui-body h-dvh w-full bg-[#050505] text-zinc-100">
@@ -995,10 +1652,78 @@ function App() {
                       {chatMessages.map((entry) => (
                         <li
                           key={`${entry.id}`}
-                          className="px-4 py-2 text-zinc-400"
+                          className="px-4 py-2 text-zinc-400 animate-[fadeIn_220ms_ease-out] motion-reduce:animate-none"
                         >
-                          <span className="text-zinc-100">{entry.nickname}</span>{' '}
-                          <span>{entry.body}</span>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <span
+                                className={
+                                  entry.nickname === 'system'
+                                    ? 'text-[#f7768e]'
+                                    : entry.nickname === ADMIN_USER
+                                      ? 'text-[#73daca]'
+                                      : 'text-zinc-100'
+                                }
+                              >
+                                {entry.nickname}
+                              </span>{' '}
+                              {entry.body === 'message deleted' ? (
+                                <span className="italic text-zinc-500">message deleted</span>
+                              ) : entry.nickname === 'system' ? (
+                                <span className="italic text-zinc-500">{entry.body}</span>
+                              ) : (
+                                <span>{entry.body}</span>
+                              )}
+                            </div>
+                            {authNickname === ADMIN_USER && (
+                              <details className="relative shrink-0" data-admin-menu>
+                                <summary className="list-none cursor-pointer text-xs text-zinc-500 transition hover:text-zinc-200">
+                                  admin
+                                </summary>
+                                <div className="admin-menu absolute right-0 mt-1 w-40 border border-zinc-800 bg-[#050505] p-1 text-xs text-zinc-200 shadow-lg">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      openAdminConfirm({
+                                        kind: 'delete',
+                                        messageId: entry.id,
+                                      })
+                                      closeAdminMenus()
+                                    }}
+                                    className="block w-full px-2 py-1 text-left text-zinc-400 transition hover:text-zinc-100 cursor-pointer"
+                                  >
+                                    delete
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      openAdminConfirm({
+                                        kind: 'warn',
+                                        messageId: entry.id,
+                                      })
+                                      closeAdminMenus()
+                                    }}
+                                    className="block w-full px-2 py-1 text-left text-zinc-400 transition hover:text-zinc-100 cursor-pointer"
+                                  >
+                                    delete and warn
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      openAdminConfirm({
+                                        kind: 'ban',
+                                        nickname: entry.nickname,
+                                      })
+                                      closeAdminMenus()
+                                    }}
+                                    className="block w-full px-2 py-1 text-left text-zinc-400 transition hover:text-zinc-100 cursor-pointer"
+                                  >
+                                    ban
+                                  </button>
+                                </div>
+                              </details>
+                            )}
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -1007,6 +1732,11 @@ function App() {
                     onSubmit={handleSendMessage}
                     className="border-t border-zinc-800 px-4 py-3"
                   >
+                    {chatNotice && (
+                      <div className="mb-2 text-[var(--color-accent-red)]">
+                        {chatNotice}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <input
                         value={messageBody}
@@ -1036,7 +1766,7 @@ function App() {
                     {chatLoading && (
                       <div className="mt-2 text-zinc-500">updating…</div>
                     )}
-                    <div className="mt-2 text-zinc-500">
+                    <div className="mt-2 flex items-center justify-between text-zinc-500">
                       <button
                         type="button"
                         className="text-zinc-400 hover:text-zinc-200"
@@ -1044,14 +1774,16 @@ function App() {
                       >
                         sign out
                       </button>
-                      {authNickname === ADMIN_USER && (
+                      {authNickname === ADMIN_USER ? (
                         <button
                           type="button"
-                          className="ml-3 text-zinc-400 hover:text-zinc-200"
-                          onClick={handleAdminClear}
+                          className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                          onClick={() => setAdminMenuOpen(true)}
                         >
-                          clear chat
+                          admin
                         </button>
+                      ) : (
+                        <span aria-hidden="true" />
                       )}
                     </div>
                   </form>
@@ -1071,10 +1803,78 @@ function App() {
                       {chatMessages.map((entry) => (
                         <li
                           key={`${entry.id}`}
-                          className="px-4 py-2 text-zinc-400"
+                          className="px-4 py-2 text-zinc-400 animate-[fadeIn_220ms_ease-out] motion-reduce:animate-none"
                         >
-                          <span className="text-zinc-100">{entry.nickname}</span>{' '}
-                          <span>{entry.body}</span>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <span
+                                className={
+                                  entry.nickname === 'system'
+                                    ? 'text-[#f7768e]'
+                                    : entry.nickname === ADMIN_USER
+                                      ? 'text-[#73daca]'
+                                      : 'text-zinc-100'
+                                }
+                              >
+                                {entry.nickname}
+                              </span>{' '}
+                              {entry.body === 'message deleted' ? (
+                                <span className="italic text-zinc-500">message deleted</span>
+                              ) : entry.nickname === 'system' ? (
+                                <span className="italic text-zinc-500">{entry.body}</span>
+                              ) : (
+                                <span>{entry.body}</span>
+                              )}
+                            </div>
+                            {authNickname === ADMIN_USER && (
+                              <details className="relative shrink-0" data-admin-menu>
+                                <summary className="list-none cursor-pointer text-xs text-zinc-500 transition hover:text-zinc-200">
+                                  admin
+                                </summary>
+                                <div className="admin-menu absolute right-0 mt-1 w-40 border border-zinc-800 bg-[#050505] p-1 text-xs text-zinc-200 shadow-lg">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      openAdminConfirm({
+                                        kind: 'delete',
+                                        messageId: entry.id,
+                                      })
+                                      closeAdminMenus()
+                                    }}
+                                    className="block w-full px-2 py-1 text-left text-zinc-400 transition hover:text-zinc-100 cursor-pointer"
+                                  >
+                                    delete
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      openAdminConfirm({
+                                        kind: 'warn',
+                                        messageId: entry.id,
+                                      })
+                                      closeAdminMenus()
+                                    }}
+                                    className="block w-full px-2 py-1 text-left text-zinc-400 transition hover:text-zinc-100 cursor-pointer"
+                                  >
+                                    delete and warn
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      openAdminConfirm({
+                                        kind: 'ban',
+                                        nickname: entry.nickname,
+                                      })
+                                      closeAdminMenus()
+                                    }}
+                                    className="block w-full px-2 py-1 text-left text-zinc-400 transition hover:text-zinc-100 cursor-pointer"
+                                  >
+                                    ban
+                                  </button>
+                                </div>
+                              </details>
+                            )}
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -1087,6 +1887,11 @@ function App() {
                     <div className="text-zinc-400">
                       {authMode === 'login' ? 'sign in to chat' : 'create an account'}
                     </div>
+                    {chatError && (
+                      <div className="text-[var(--color-accent-red)]">
+                        {chatError}
+                      </div>
+                    )}
                     <input
                       value={authNicknameInput}
                       onChange={(event) => setAuthNicknameInput(event.target.value)}
@@ -1114,18 +1919,16 @@ function App() {
                     {authError && (
                       <div className="text-[var(--color-accent-red)]">{authError}</div>
                     )}
-                    {chatError && (
-                      <div className="text-[var(--color-accent-red)]">{chatError}</div>
-                    )}
                     {chatLoading && (
                       <div className="text-zinc-500">updating…</div>
                     )}
                     <button
                       type="button"
                       onClick={() =>
-                        setAuthMode((prev) =>
-                          prev === 'login' ? 'register' : 'login',
-                        )
+                        setAuthMode((prev) => {
+                          setChatNotice(null)
+                          return prev === 'login' ? 'register' : 'login'
+                        })
                       }
                       className="group inline-flex w-fit items-center gap-1 text-left text-zinc-400 transition-colors duration-200 ease-out hover:text-zinc-100 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 cursor-pointer"
                     >
@@ -1143,9 +1946,276 @@ function App() {
           </aside>
         </div>
       </div>
-      {infoOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-lg border border-zinc-800 bg-[#050505] p-6 text-zinc-200 shadow-xl">
+      {adminMenuVisible && (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 transition-opacity duration-200 ${adminMenuActive ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+          onClick={closeAdminMenu}
+        >
+          <div
+            className={`w-full max-w-md border border-zinc-800 bg-[#050505] text-zinc-200 shadow-xl transition duration-200 ${adminMenuActive ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-2 scale-95 opacity-0'}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={`transition-opacity duration-120 ${adminMenuViewAnimating ? 'opacity-0' : 'opacity-100'}`}>
+              {adminMenuView === 'main' && (
+                <div className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="ui-header font-extrabold">admin</div>
+                    <button
+                      type="button"
+                      className="text-zinc-500 transition hover:text-zinc-200 cursor-pointer"
+                      onClick={closeAdminMenu}
+                      aria-label="Close admin menu"
+                    >
+                      close
+                    </button>
+                  </div>
+                  <div className="mt-4 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      className="w-full border border-zinc-800 px-3 py-2 text-left text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-100 cursor-pointer"
+                      onClick={() => {
+                        closeAdminMenu()
+                        openAdminConfirm({ kind: 'clear' })
+                      }}
+                    >
+                      wipe chat
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full border border-zinc-800 px-3 py-2 text-left text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-100 cursor-pointer"
+                      onClick={() => void openAdminMenuView('active')}
+                    >
+                      active users
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full border border-zinc-800 px-3 py-2 text-left text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-100 cursor-pointer"
+                      onClick={() => void openAdminMenuView('banned')}
+                    >
+                      banned users
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {(adminMenuView === 'active' || adminMenuView === 'banned') && (
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-3 border-b border-zinc-800 px-6 py-4">
+                    <button
+                      type="button"
+                      className="text-zinc-500 transition hover:text-zinc-200 cursor-pointer"
+                      onClick={backToAdminMain}
+                      aria-label="Back"
+                    >
+                      ←
+                    </button>
+                    <div className="ui-header font-extrabold">
+                      {adminMenuView === 'active' ? 'active users' : 'banned users'}
+                    </div>
+                    <button
+                      type="button"
+                      className="ml-auto text-zinc-500 transition hover:text-zinc-200 cursor-pointer"
+                      onClick={closeAdminMenu}
+                      aria-label="Close admin menu"
+                    >
+                      close
+                    </button>
+                  </div>
+                  <div className="px-6 pt-4">
+                    <input
+                      value={adminUserSearch}
+                      onChange={(event) => setAdminUserSearch(event.target.value)}
+                      placeholder="search users"
+                      className="h-9 w-full border border-zinc-700 bg-black/40 px-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="scrollbar-minimal max-h-64 min-h-[120px] overflow-y-auto px-6 py-3">
+                    {adminUserLoading ? (
+                      <div className="py-4 text-zinc-500">loading…</div>
+                    ) : (() => {
+                      const searchLower = adminUserSearch.toLowerCase()
+                      const filtered = adminUserList.filter((user) =>
+                        user.nickname.toLowerCase().includes(searchLower),
+                      )
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="py-4 text-zinc-500">
+                            {adminUserSearch ? 'no matching users' : 'no users'}
+                          </div>
+                        )
+                      }
+                      return (
+                        <ul className="flex flex-col gap-1">
+                          {filtered.map((user) => (
+                            <li
+                              key={user.nickname}
+                              className="flex items-center justify-between gap-3 border-b border-zinc-800/50 py-2 last:border-0 animate-[fadeIn_120ms_ease-out] motion-reduce:animate-none"
+                            >
+                              <span className="truncate text-zinc-200">
+                                {user.nickname}
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2">
+                                {adminMenuView === 'active' ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="text-zinc-500 transition hover:text-[#f7768e] cursor-pointer"
+                                      onClick={() =>
+                                        handleAdminUserAction({
+                                          kind: 'ban',
+                                          nickname: user.nickname,
+                                        })
+                                      }
+                                    >
+                                      ban
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="text-zinc-500 transition hover:text-[#f7768e] cursor-pointer"
+                                      onClick={() =>
+                                        handleAdminUserAction({
+                                          kind: 'delete-user',
+                                          nickname: user.nickname,
+                                        })
+                                      }
+                                    >
+                                      delete
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="text-zinc-500 transition hover:text-[#73daca] cursor-pointer"
+                                      onClick={() =>
+                                        handleAdminUserAction({
+                                          kind: 'unban',
+                                          nickname: user.nickname,
+                                        })
+                                      }
+                                    >
+                                      unban
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="text-zinc-500 transition hover:text-[#f7768e] cursor-pointer"
+                                      onClick={() =>
+                                        handleAdminUserAction({
+                                          kind: 'delete-user',
+                                          nickname: user.nickname,
+                                        })
+                                      }
+                                    >
+                                      delete
+                                    </button>
+                                  </>
+                                )}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {adminConfirmVisible && adminAction && (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 transition-opacity duration-200 ${adminConfirmActive ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+          onClick={cancelAdminConfirm}
+        >
+          <div
+            className={`w-full max-w-md border border-zinc-800 bg-[#050505] p-6 text-zinc-200 shadow-xl transition duration-200 ${adminConfirmActive ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-2 scale-95 opacity-0'
+              }`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="ui-header font-extrabold">confirm</div>
+            <p className="mt-3 text-zinc-400">{adminConfirmTitle}</p>
+            {adminConfirmBody && (
+              <p className="mt-2 text-zinc-500">{adminConfirmBody}</p>
+            )}
+            <div className="mt-4 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                className="text-zinc-400 transition hover:text-zinc-100 cursor-pointer"
+                onClick={cancelAdminConfirm}
+              >
+                cancel
+              </button>
+              <button
+                type="button"
+                className="border border-zinc-700 bg-zinc-900 px-3 py-1 text-zinc-100 transition hover:border-zinc-500 cursor-pointer"
+                onClick={confirmAdminAction}
+              >
+                confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {adminTokenVisible && (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 transition-opacity duration-200 ${adminTokenActive ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+          onClick={cancelAdminToken}
+        >
+          <div
+            className={`w-full max-w-md border border-zinc-800 bg-[#050505] p-6 text-zinc-200 shadow-xl transition duration-200 ${adminTokenActive ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-2 scale-95 opacity-0'
+              }`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="ui-header font-extrabold">admin token</div>
+            <p className="mt-3 text-zinc-400">
+              enter the admin token to continue.
+            </p>
+            <input
+              type="password"
+              value={adminTokenInput}
+              onChange={(event) => setAdminTokenInput(event.target.value)}
+              placeholder="admin token"
+              className="mt-3 h-9 w-full border border-zinc-700 bg-black/40 px-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
+            />
+            {adminTokenError && (
+              <div className="mt-2 text-[var(--color-accent-red)]">
+                {adminTokenError}
+              </div>
+            )}
+            <div className="mt-4 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                className="text-zinc-400 transition hover:text-zinc-100 cursor-pointer"
+                onClick={cancelAdminToken}
+              >
+                cancel
+              </button>
+              <button
+                type="button"
+                className="border border-zinc-700 bg-zinc-900 px-3 py-1 text-zinc-100 transition hover:border-zinc-500 cursor-pointer"
+                onClick={submitAdminToken}
+              >
+                continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {infoVisible && (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 transition-opacity duration-200 ${infoActive ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+          onClick={() => setInfoOpen(false)}
+        >
+          <div
+            className={`w-full max-w-lg border border-zinc-800 bg-[#050505] p-6 text-zinc-200 shadow-xl transition duration-200 ${infoActive ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-2 scale-95 opacity-0'
+              }`}
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="flex items-start justify-between gap-4">
               <div className="ui-header font-extrabold">about</div>
               <button

@@ -164,6 +164,14 @@ async function main() {
             return res.status(400).json({ error: "Invalid password" });
         }
 
+        const existingUser = await db.get<{ banned: number }>(
+            "SELECT banned FROM users WHERE nickname = ?",
+            nickname
+        );
+        if (existingUser?.banned) {
+            return res.status(403).json({ error: "this account has been banned" });
+        }
+
         const passwordHash = await bcrypt.hash(password, 10);
         const createdAt = new Date().toISOString();
 
@@ -196,10 +204,18 @@ async function main() {
         const user = await db.get<{
             nickname: string;
             password_hash: string;
-        }>("SELECT nickname, password_hash FROM users WHERE nickname = ?", nickname);
+            banned: number;
+        }>(
+            "SELECT nickname, password_hash, banned FROM users WHERE nickname = ?",
+            nickname
+        );
 
         if (!user) {
             return res.status(401).json({ error: "Invalid credentials" });
+        }
+
+        if (user.banned) {
+            return res.status(403).json({ error: "this account has been banned" });
         }
 
         const ok = await bcrypt.compare(password, user.password_hash);
@@ -211,7 +227,19 @@ async function main() {
         return res.json({ nickname, token });
     });
 
-    app.get("/messages", requireAuth, async (_req: AuthedRequest, res: Response) => {
+    app.get("/messages", requireAuth, async (req: AuthedRequest, res: Response) => {
+        const nickname = req.user?.nickname || "";
+        const user = await db.get<{ banned: number }>(
+            "SELECT banned FROM users WHERE nickname = ?",
+            nickname
+        );
+        if (!user) {
+            return res.status(401).json({ error: "Invalid token" });
+        }
+        if (user.banned) {
+            return res.status(403).json({ error: "this account has been banned" });
+        }
+
         const rows = await db.all<
             Array<{
                 id: number;
@@ -243,11 +271,22 @@ async function main() {
         return res.json({ messages });
     });
 
-    app.get("/messages/stream", (req: Request, res: Response) => {
+    app.get("/messages/stream", async (req: Request, res: Response) => {
         const token = String(req.query?.token || "");
         const nickname = token ? getNicknameFromToken(token) : null;
         if (!nickname) {
             return res.status(401).json({ error: "Invalid token" });
+        }
+
+        const user = await db.get<{ banned: number }>(
+            "SELECT banned FROM users WHERE nickname = ?",
+            nickname
+        );
+        if (!user) {
+            return res.status(401).json({ error: "Invalid token" });
+        }
+        if (user.banned) {
+            return res.status(403).json({ error: "this account has been banned" });
         }
 
         res.setHeader("Content-Type", "text/event-stream");
@@ -298,6 +337,18 @@ async function main() {
     });
 
     app.post("/messages", requireAuth, async (req: AuthedRequest, res: Response) => {
+        const nickname = req.user?.nickname || "";
+        const user = await db.get<{ banned: number }>(
+            "SELECT banned FROM users WHERE nickname = ?",
+            nickname
+        );
+        if (!user) {
+            return res.status(401).json({ error: "Invalid token" });
+        }
+        if (user.banned) {
+            return res.status(403).json({ error: "this account has been banned" });
+        }
+
         const body = String(req.body?.body || "").trim();
         if (!validateMessage(body)) {
             return res.status(400).json({ error: "Invalid message" });
@@ -307,7 +358,6 @@ async function main() {
             return res.status(400).json({ error: "Links are not allowed" });
         }
 
-        const nickname = req.user?.nickname || "";
         const now = Date.now();
         const limit = checkRateLimit(nickname, now);
         if (!limit.allowed) {
@@ -356,6 +406,202 @@ async function main() {
 
         return res.json({ ok: true });
     });
+
+    app.post(
+        "/admin/messages/:id/delete",
+        requireAdmin,
+        async (req: Request, res: Response) => {
+            const messageId = Number(req.params.id);
+            if (!Number.isFinite(messageId) || messageId <= 0) {
+                return res.status(400).json({ error: "Invalid message id" });
+            }
+
+            const existing = await db.get("SELECT 1 FROM messages WHERE id = ?", messageId);
+            if (!existing) {
+                return res.status(404).json({ error: "Message not found" });
+            }
+
+            await db.run(
+                "UPDATE messages SET body = ? WHERE id = ?",
+                "message deleted",
+                messageId
+            );
+
+            for (const client of streamClients) {
+                writeSseEvent(client.res, "delete", { id: messageId });
+            }
+
+            return res.json({ ok: true });
+        }
+    );
+
+    app.post(
+        "/admin/messages/:id/warn",
+        requireAdmin,
+        async (req: Request, res: Response) => {
+            const messageId = Number(req.params.id);
+            if (!Number.isFinite(messageId) || messageId <= 0) {
+                return res.status(400).json({ error: "Invalid message id" });
+            }
+
+            const message = await db.get<{ nickname: string }>(
+                "SELECT nickname FROM messages WHERE id = ?",
+                messageId
+            );
+            if (!message?.nickname) {
+                return res.status(404).json({ error: "Message not found" });
+            }
+
+            await db.run(
+                "UPDATE messages SET body = ? WHERE id = ?",
+                "message deleted",
+                messageId
+            );
+
+            for (const client of streamClients) {
+                writeSseEvent(client.res, "delete", { id: messageId });
+                writeSseEvent(client.res, "warn", {
+                    nickname: message.nickname,
+                    messageId,
+                });
+            }
+
+            return res.json({ ok: true, nickname: message.nickname });
+        }
+    );
+
+    app.post(
+        "/admin/users/:nickname/ban",
+        requireAdmin,
+        async (req: Request, res: Response) => {
+            const nickname = String(req.params.nickname || "").trim();
+            if (!validateNickname(nickname)) {
+                return res.status(400).json({ error: "Invalid username" });
+            }
+
+            await db.run("UPDATE users SET banned = 1 WHERE nickname = ?", nickname);
+            await db.run(
+                "UPDATE messages SET body = ? WHERE nickname = ?",
+                "message deleted",
+                nickname
+            );
+
+            const createdAt = new Date().toISOString();
+            const logResult = await db.run(
+                "INSERT INTO messages (nickname, body, created_at) VALUES (?, ?, ?)",
+                "system",
+                `user ${nickname} has been banned`,
+                createdAt
+            );
+
+            await db.run(
+                "DELETE FROM messages WHERE id NOT IN (" +
+                "SELECT id FROM messages ORDER BY id DESC LIMIT 100" +
+                ")"
+            );
+
+            for (const client of streamClients) {
+                writeSseEvent(client.res, "purge", { nickname });
+                writeSseEvent(client.res, "ban", { nickname });
+                writeSseEvent(client.res, "message", {
+                    id: logResult.lastID,
+                    nickname: "system",
+                    body: `user ${nickname} has been banned`,
+                    created_at: createdAt,
+                });
+            }
+
+            return res.json({ ok: true });
+        }
+    );
+
+    app.get(
+        "/admin/users/active",
+        requireAdmin,
+        async (_req: Request, res: Response) => {
+            const rows = await db.all<Array<{ nickname: string; created_at: string }>>(
+                "SELECT nickname, created_at FROM users WHERE banned = 0 ORDER BY nickname COLLATE NOCASE"
+            );
+            return res.json({ users: rows });
+        }
+    );
+
+    app.get(
+        "/admin/users/banned",
+        requireAdmin,
+        async (_req: Request, res: Response) => {
+            const rows = await db.all<Array<{ nickname: string; created_at: string }>>(
+                "SELECT nickname, created_at FROM users WHERE banned = 1 ORDER BY nickname COLLATE NOCASE"
+            );
+            return res.json({ users: rows });
+        }
+    );
+
+    app.post(
+        "/admin/users/:nickname/unban",
+        requireAdmin,
+        async (req: Request, res: Response) => {
+            const nickname = String(req.params.nickname || "").trim();
+            if (!validateNickname(nickname)) {
+                return res.status(400).json({ error: "Invalid username" });
+            }
+
+            const user = await db.get<{ banned: number }>(
+                "SELECT banned FROM users WHERE nickname = ?",
+                nickname
+            );
+            if (!user) {
+                return res.status(404).json({ error: "User not found" });
+            }
+
+            await db.run("UPDATE users SET banned = 0 WHERE nickname = ?", nickname);
+
+            const createdAt = new Date().toISOString();
+            const logResult = await db.run(
+                "INSERT INTO messages (nickname, body, created_at) VALUES (?, ?, ?)",
+                "system",
+                `user ${nickname} has been unbanned`,
+                createdAt
+            );
+
+            await db.run(
+                "DELETE FROM messages WHERE id NOT IN (" +
+                "SELECT id FROM messages ORDER BY id DESC LIMIT 100" +
+                ")"
+            );
+
+            for (const client of streamClients) {
+                writeSseEvent(client.res, "message", {
+                    id: logResult.lastID,
+                    nickname: "system",
+                    body: `user ${nickname} has been unbanned`,
+                    created_at: createdAt,
+                });
+            }
+
+            return res.json({ ok: true });
+        }
+    );
+
+    app.delete(
+        "/admin/users/:nickname",
+        requireAdmin,
+        async (req: Request, res: Response) => {
+            const nickname = String(req.params.nickname || "").trim();
+            if (!validateNickname(nickname)) {
+                return res.status(400).json({ error: "Invalid username" });
+            }
+
+            await db.run("DELETE FROM messages WHERE nickname = ?", nickname);
+            await db.run("DELETE FROM users WHERE nickname = ?", nickname);
+
+            for (const client of streamClients) {
+                writeSseEvent(client.res, "purge", { nickname });
+            }
+
+            return res.json({ ok: true });
+        }
+    );
 
     app.listen(PORT, () => {
         console.log(`chat backend listening on ${PORT}`);
